@@ -32,6 +32,19 @@ Each step uses the following update equations:
 * epsi: epsi1 - ((psi0 - psides0) - v0 * delta0 / Lf * dt);
 
 
+### Choice of N and dt
+
+The values N = 10 and dt = 0.1 were used as a starting point (from the [MPC project Q&A video](https://www.youtube.com/watch?v=bOQuhpz3YfU)). After tweaking N and dt, the values (10, 0.1) seemed to work the best. When N was increased to 20, the car turned erratically. Similarly, when dt was set to 0.2, or 0.05, the car could not follow the waypoints well. This is most likely due to the 100ms latency simulated by the system.
+
+
+### Prepocessing
+
+The list of waypoints ptsx and ptsy were transformed so that they centered around 0. The same thing for the vehicle heading. This was done to reduce the number of transforms needed later on.
+
+### Dealing with latency
+
+The values of N and dt were selected so that we look one second ahead, and produce predicted values that work well with the latency of 100ms.
+
 ## Dependencies
 
 * cmake >= 3.5
