@@ -5,22 +5,15 @@
 
 using CppAD::AD;
 
-// TODO: Set the timestep length and duration
+// Set up our timestep and duration for our MPC controller
 size_t N = 10;
 double dt = 0.1;
 
-// This value assumes the model presented in the classroom is used.
-//
-// It was obtained by measuring the radius formed by running the vehicle in the
-// simulator around in a circle with a constant steering angle and velocity on a
-// flat terrain.
-//
-// Lf was tuned until the the radius formed by the simulating the model
-// presented in the classroom matched the previous radius.
-//
-// This is the length from front to CoG that has a similar radius.
+// This is the length from the front of the car to its center of gravity
 const double Lf = 2.67;
 
+// Ideally, both our cross track error (cte) and heading error (espi) should be 0
+// We also aim for a reference velocity of 100
 double ref_cte = 0;
 double ref_espi = 0;
 double ref_v = 100;
@@ -51,9 +44,14 @@ class FG_eval {
     // Costs //
     ///////////
     fg[0] = 0;
+    // A very large weight of 15000 was used for the cost of the
+    // cross track error and the heading error, relative to the velocity.
+    // This means that the solver will prioritize minimizing cte and epsi
+    // even if it comes at a cost of other properties like velocity
+
     for (t = 0; t < N; t++) {
-      fg[0] += 2000 * CppAD::pow(vars[cte_start + t] - ref_cte, 2);
-      fg[0] += 2000 * CppAD::pow(vars[epsi_start + t] - ref_espi, 2);
+      fg[0] += 15000 * CppAD::pow(vars[cte_start + t] - ref_cte, 2);
+      fg[0] += 15000 * CppAD::pow(vars[epsi_start + t] - ref_espi, 2);
       fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
     
@@ -80,6 +78,7 @@ class FG_eval {
     fg[1 + cte_start] = vars[cte_start];
     fg[1 + epsi_start] = vars[epsi_start];
 
+    // Set up the formulas which we want to constrain
     for (t = 1; t < N; t++) {
       AD<double> x1 = vars[x_start + t];
       AD<double> y1 = vars[y_start + t];
@@ -100,14 +99,25 @@ class FG_eval {
 
       AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] * CppAD::pow(x0, 2) + coeffs[3] * CppAD::pow(x0, 3);
       AD<double> psides0 = CppAD::atan(3 * coeffs[3] * CppAD::pow(x0, 2) + 2 * coeffs[2] * x0 + coeffs[1]);
-      
+
+      // We want to constrain the following values to zero
+
+      // x1 minus predicted_x1
       fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
+
+      // y1 minus predicted_y1
       fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
-      // fg[1 + psi_start + t] = psi1 - (psi0 + v0 * delta0 / Lf * dt);  // should be psi0 - v0?
+
+      // psi1 (heading) minus predicted_psi1 (heading)
       fg[1 + psi_start + t] = psi1 - (psi0 - v0 * delta0 / Lf * dt);
+
+      // v1 minus predicted_v1 (velocity)
       fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
+
+      // cte1 minus predicted_cte1 (cross track error)
       fg[1 + cte_start + t] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
-      // fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt); // should be -v0?
+
+      // epsi1 minus predicted_epsi1 (heading error)
       fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) - v0 * delta0 / Lf * dt);
     }
 
@@ -138,8 +148,10 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   //
   // 4 * 10 + 2 * 9
+
+  // We have 6 state variables across N timesteps (6 * N)
+  // plus 2 actuators getting us from one timestep to the other (2 * (N-1))
   size_t n_vars = N * 6 + (N - 1) * 2;
-  // TODO: Set the number of constraints
   size_t n_constraints = N * 6;
 
   // Initial value of the independent variables.
@@ -151,7 +163,6 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   Dvector vars_lowerbound(n_vars);
   Dvector vars_upperbound(n_vars);
-  // TODO: Set lower and upper limits for variables.
 
   // Set all non-actuators upper and lowerlimits
   // to the max negative and positive values.
@@ -162,14 +173,12 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // The upper and lower limits of delta are set to -25 and 25
   // degrees (values in radians).
-  // NOTE: Feel free to change this to something else.
   for (i = delta_start; i < a_start; i++) {
     vars_lowerbound[i] = -0.436332 * Lf;
     vars_upperbound[i] = 0.436332 * Lf;
   }
 
   // Acceleration/decceleration upper and lower limits.
-  // NOTE: Feel free to change this to something else.
   for (i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
@@ -235,20 +244,16 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   auto cost = solution.obj_value;
   std::cout << "Cost " << cost << std::endl;
 
-  // TODO: Return the first actuator values. The variables can be accessed with
-  // `solution.x[i]`.
-  //
-  // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
-  // creates a 2 element double vector.
-
+  // Return the first actuator values (delta and a), AND
+  // the predicted points by the MPC controller (xs and ys)
   vector<double> result;
 
   result.push_back(solution.x[delta_start]);
   result.push_back(solution.x[a_start]);
 
   for (i = 0; i < N; i++) {
-    result.push_back(solution.x[x_start + i + 1]);
-    result.push_back(solution.x[y_start + i + 1]);
+    result.push_back(solution.x[x_start + i]);
+    result.push_back(solution.x[y_start + i]);
   }
 
   return result;
