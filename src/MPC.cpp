@@ -78,7 +78,7 @@ class FG_eval {
     fg[1 + cte_start] = vars[cte_start];
     fg[1 + epsi_start] = vars[epsi_start];
 
-    // Set up the formulas which we want to constrain
+    // Set up the update equations
     for (t = 1; t < N; t++) {
       AD<double> x1 = vars[x_start + t];
       AD<double> y1 = vars[y_start + t];
