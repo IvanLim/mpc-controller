@@ -2,6 +2,36 @@
 
 ---
 
+## Observations
+
+
+### Model
+
+
+The state model consists of the following components:
+* x: x position
+* y: y position
+* psi: heading
+* v: velocity
+* cte: cross track error
+* epsi: heading error
+
+
+It also has the following actuators:
+* delta: steering angle
+* a: acceleration
+
+
+Each step uses the following update equations:
+(Lf is the distance from the front of the car to its center of gravity)
+* x: x1 - (x0 + v0 * cos(psi0) * dt)
+* y: y1 - (y0 + v0 * sin(psi0) * dt)
+* psi: psi1 - (psi0 - v0 * delta0 / Lf * dt)
+* v: v1 - (v0 + a0 * dt)
+* cte: cte1 - ((evaluated_polynomial_with_coefficients_at_x0 - y0) + (v0 * sin(epsi0) * dt))
+* epsi: epsi1 - ((psi0 - psides0) - v0 * delta0 / Lf * dt);
+
+
 ## Dependencies
 
 * cmake >= 3.5
