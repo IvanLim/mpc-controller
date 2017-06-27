@@ -7,7 +7,7 @@ using CppAD::AD;
 
 // Set up our timestep and duration for our MPC controller
 size_t N = 10;
-double dt = 0.1;
+double dt = 0.3;
 
 // This is the length from the front of the car to its center of gravity
 const double Lf = 2.67;
@@ -32,13 +32,14 @@ class FG_eval {
  public:
   // Fitted polynomial coefficients
   Eigen::VectorXd coeffs;
+
   FG_eval(Eigen::VectorXd coeffs) { this->coeffs = coeffs; }
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
   void operator()(ADvector& fg, const ADvector& vars) {
 
     // The fg vector contains the costs and constraints that optops will optimize for
-    // We start by sett vars[0] <<ing up fg[0], which is the cost function
+    // We start by setting up fg[0], which is the cost function
 
     ///////////
     // Costs //
@@ -50,8 +51,8 @@ class FG_eval {
     // even if it comes at a cost of other properties like velocity
 
     for (t = 0; t < N; t++) {
-      fg[0] += 15000 * CppAD::pow(vars[cte_start + t] - ref_cte, 2);
-      fg[0] += 15000 * CppAD::pow(vars[epsi_start + t] - ref_espi, 2);
+      fg[0] += 20000 * CppAD::pow(vars[cte_start + t] - ref_cte, 2);
+      fg[0] += 20000 * CppAD::pow(vars[epsi_start + t] - ref_espi, 2);
       fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
     
@@ -61,10 +62,9 @@ class FG_eval {
     }
 
     for (t = 0; t < N - 2; t++) {
-      fg[0] += 200 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+      fg[0] += 100 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
       fg[0] += 10 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
-
 
     /////////////////
     // Constraints //
@@ -127,7 +127,9 @@ class FG_eval {
 //
 // MPC class definition implementation.
 //
-MPC::MPC() {}
+MPC::MPC() {
+  this->previous_timestamp = std::chrono::high_resolution_clock::now();
+}
 MPC::~MPC() {}
 
 vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
@@ -135,9 +137,38 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
-  // TODO: Set the number of model variables (includes both states and inputs).
-  // For example: If the state is a 4 element vector, the actuators is a 2
-  // element vector and there are 10 timesteps. The number of variables is:
+  // Calculate our dt timestamp
+  std::chrono::high_resolution_clock::time_point newtime = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> fg_dt = std::chrono::duration_cast<std::chrono::duration<double>> (newtime - this->previous_timestamp);
+
+  // Depending on our latency, we need to adjust our maximum speed and rework our N and dt values
+  // 100ms -> look 1 sec ahead
+  // 200ms -> look 2 secs ahead
+  // dt = 0.1 -> 80
+  // dt = 0.2 -> 60
+  // dt = 0.3 -> 40
+  // dt = 0.4 -> 20
+  // dt >= 0.5 -> 0  
+  // 1000ms -> look 10 secs ahead, can safely move 1 meter before things get dangerous.
+  
+  dt = fg_dt.count();
+
+  safe_to_drive = true;
+  if (dt <= 0.1) { ref_v = 100; }
+  else if (dt <= 0.2) { ref_v = 80; }
+  else if (dt <= 0.3) { ref_v = 60; }
+  else if (dt <= 0.4) { ref_v = 30; }
+  else {
+    std::cout << "\nWARNING: The latency is too high. It is not safe to drive. Blocking input to actuators.\n" << std::endl;
+    safe_to_drive = false;
+    ref_v = 0; 
+  }
+
+  // double estimated_v = 1000 / (dt * 1000);
+  // ref_v = std::min(estimated_v, 100.0);
+  std::cout<< "dt:" << dt << "  ref_v:" << ref_v << std::endl;
+  this->previous_timestamp = newtime;
+  
 
   double x = state[0];
   double y = state[1];
@@ -145,9 +176,6 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   double v = state[3];
   double cte = state[4];
   double epsi = state[5];
-
-  //
-  // 4 * 10 + 2 * 9
 
   // We have 6 state variables across N timesteps (6 * N)
   // plus 2 actuators getting us from one timestep to the other (2 * (N-1))
@@ -248,8 +276,14 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // the predicted points by the MPC controller (xs and ys)
   vector<double> result;
 
-  result.push_back(solution.x[delta_start]);
-  result.push_back(solution.x[a_start]);
+  // Only pass the actuator input if it is safe to drive!
+  if (safe_to_drive) {
+    result.push_back(solution.x[delta_start]);
+    result.push_back(solution.x[a_start]);
+  } else {
+    result.push_back(0);
+    result.push_back(0);
+  }
 
   for (i = 0; i < N; i++) {
     result.push_back(solution.x[x_start + i]);
