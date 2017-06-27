@@ -34,7 +34,10 @@ Each step uses the following update equations:
 
 ### Choice of N and dt
 
-The values N = 10 and dt = 0.1 were used as a starting point (from the [MPC project Q&A video](https://www.youtube.com/watch?v=bOQuhpz3YfU)). After tweaking N and dt, the values (10, 0.1) seemed to work the best. When N was increased to 20, the car turned erratically. Similarly, when dt was set to 0.2, or 0.05, the car could not follow the waypoints well. This is most likely due to the 100ms latency simulated by the system.
+The values N = 10 and dt = 0.1 were used as a starting point (from the [MPC project Q&A video](https://www.youtube.com/watch?v=bOQuhpz3YfU)). When N was increased to 20, the car turned erratically. Similarly, when dt was set to 0.2, or 0.05, the car could not follow the waypoints well. This is most likely due to the 100ms latency simulated by the system. The first time this project was submitted, the car drove smoothly around the track on my machine, but crashed on the reviewer's machine. To workaround the problems caused by unpredictable latency, the following changes were made:
+* dt is now calculated based on time elapsed since the last MPC.solve() call. 
+* ref_v (reference velocity) is now adjusted depending on how good/bad the latency is.
+* If the latency is too bad (> 400ms), a safety mechanism kicks in and will not allow the car to continue driving.
 
 
 ### Prepocessing
