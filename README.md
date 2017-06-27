@@ -34,7 +34,12 @@ Each step uses the following update equations:
 
 ### Choice of N and dt
 
-The values N = 10 and dt = 0.1 were used as a starting point (from the [MPC project Q&A video](https://www.youtube.com/watch?v=bOQuhpz3YfU)). When N was increased to 20, the car turned erratically. Similarly, when dt was set to 0.2, or 0.05, the car could not follow the waypoints well. This is most likely due to the 100ms latency simulated by the system. The first time this project was submitted, the car drove smoothly around the track on my machine, but crashed on the reviewer's machine. To workaround the problems caused by unpredictable latency, the following changes were made:
+The values N = 10 and dt = 0.1 were used as a starting point (from the [MPC project Q&A video](https://www.youtube.com/watch?v=bOQuhpz3YfU)). When N was increased to 20, the car turned erratically. Similarly, when dt was set to 0.2, or 0.05, the car could not follow the waypoints well. As there were issues caused by latency, I ended up settling for a dynamic dt and ref_v value that adjusted according to the observed latency.
+
+
+### Dealing with latency
+
+The first time this project was submitted, the car drove smoothly around the track on my machine, but crashed on the reviewer's machine. To workaround the problems caused by unpredictable latency, the following changes were made:
 * dt is now calculated based on time elapsed since the last MPC.solve() call. 
 * ref_v (reference velocity) is now adjusted depending on how good/bad the latency is.
 * If the latency is too bad (> 400ms), a safety mechanism kicks in and will not allow the car to continue driving.
@@ -44,9 +49,6 @@ The values N = 10 and dt = 0.1 were used as a starting point (from the [MPC proj
 
 The list of waypoints ptsx and ptsy were transformed so that they centered around 0. The same thing for the vehicle heading. This was done to reduce the number of transforms needed later on.
 
-### Dealing with latency
-
-The values of N and dt were selected so that we look one second ahead, and produce predicted values that work well with the latency of 100ms.
 
 ## Dependencies
 
